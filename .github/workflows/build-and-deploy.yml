@@ -26,45 +26,29 @@ permissions:
   contents: read
 
 jobs:
-  build-and-deploy:
+  build-and-deploy-env:
     name: Build and Deploy
+    strategy:
+      matrix:
+        include:
+          - environment: dev
+            branch: main
+            condition: ${{ github.event_name != 'push' || github.ref == 'refs/heads/main' }}
+          - environment: qa
+            branch: qa
+            condition: ${{ github.event_name != 'push' || github.ref == 'refs/heads/qa' || github.event_name == 'workflow_run' }}
+          - environment: prod
+            branch: prod
+            condition: ${{ github.event_name != 'push' || github.ref == 'refs/heads/prod' || github.event_name == 'workflow_run' }}
+    if: ${{ matrix.condition }}
     runs-on: macos-15
-    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'dev') || (github.ref == 'refs/heads/qa' && 'qa') || (github.ref == 'refs/heads/prod' && 'prod') }}
+    environment: ${{ matrix.environment }}
     
     steps:
-      - name: Determine environment and branch
-        id: env-branch
-        run: |
-          # Determine environment based on branch or input
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            ENVIRONMENT="${{ github.event.inputs.environment }}"
-          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            ENVIRONMENT="dev"
-          elif [ "${{ github.ref }}" = "refs/heads/qa" ]; then
-            ENVIRONMENT="qa"
-          elif [ "${{ github.ref }}" = "refs/heads/prod" ]; then
-            ENVIRONMENT="prod"
-          fi
-          
-          # Determine branch based on environment
-          if [ "$ENVIRONMENT" = "dev" ]; then
-            BRANCH="main"
-          else
-            BRANCH="$ENVIRONMENT"
-          fi
-          
-          echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
-          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
-          
-          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
-          
-          echo "Deploying to $ENVIRONMENT environment from $BRANCH branch"
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ env.BRANCH }}
+          ref: ${{ matrix.branch }}
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -72,13 +56,12 @@ jobs:
           ruby-version: "3.2"
 
       - name: Install Fastlane
-        run: |
-          echo "Installing Fastlane Dummy"
-          # In a real scenario, you would run the actual fastlane installation command
-          # gem install fastlane
+        run: echo "Installing Fastlane Dummy"
+        # In a real scenario, you would run the actual fastlane installation command
+        # gem install fastlane
 
       - name: Set BUILD_NUMBER
-        if: env.ENVIRONMENT == 'dev'
+        if: matrix.environment == 'dev'
         run: |
           git fetch origin main
           BUILD_NUMBER=$(git rev-list --count origin/main)
@@ -98,12 +81,12 @@ jobs:
         env:
           TURBO_URL: ${{ vars.TURBO_URL }}
         run: |
-          echo "Running fastlane ios build_and_deploy_${{ env.ENVIRONMENT }}"
+          echo "Running fastlane ios build_and_deploy_${{ matrix.environment }}"
           # This is a simulation - in a real scenario you would run the actual fastlane command
           echo "TURBO_URL: $TURBO_URL"
-          echo "ENVIRONMENT: ${{ env.ENVIRONMENT }}"
-          echo "BRANCH: ${{ env.BRANCH }}"
+          echo "ENVIRONMENT: ${{ matrix.environment }}"
+          echo "BRANCH: ${{ matrix.branch }}"
           echo "BUILD_DESCRIPTION: $BUILD_DESCRIPTION"
-          if [ "${{ env.ENVIRONMENT }}" = "dev" ]; then
+          if [ "${{ matrix.environment }}" = "dev" ]; then
             echo "BUILD_NUMBER: $BUILD_NUMBER"
           fi

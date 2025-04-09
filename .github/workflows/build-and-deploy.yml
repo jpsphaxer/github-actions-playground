@@ -33,25 +33,27 @@ jobs:
     steps:
       - id: set-matrix
         run: |
-          # Default to empty array
+          # Initialize empty array
           ENVIRONMENTS="[]"
           
-          # For workflow_dispatch, only include the selected environment
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # For manual dispatch, use the selected environment
             ENVIRONMENTS="[\"${{ github.event.inputs.environment }}\"]"
-          
-          # For push events, only include the branch that was pushed to
           elif [[ "${{ github.event_name }}" == "push" ]]; then
-            if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-              ENVIRONMENTS="[\"dev\"]"
-            elif [[ "${{ github.ref }}" == "refs/heads/qa" ]]; then
-              ENVIRONMENTS="[\"qa\"]"
-            elif [[ "${{ github.ref }}" == "refs/heads/prod" ]]; then
-              ENVIRONMENTS="[\"prod\"]"
-            fi
-          
-          # For workflow_run from tag workflow, include all environments
+            # For push events, map branch to environment using case statement
+            case "${{ github.ref }}" in
+              refs/heads/main)
+                ENVIRONMENTS="[\"dev\"]"
+                ;;
+              refs/heads/qa)
+                ENVIRONMENTS="[\"qa\"]"
+                ;;
+              refs/heads/prod)
+                ENVIRONMENTS="[\"prod\"]"
+                ;;
+            esac
           elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            # For tag events, build all environments
             ENVIRONMENTS="[\"dev\", \"qa\", \"prod\"]"
           fi
           
@@ -68,20 +70,42 @@ jobs:
     environment: ${{ matrix.environment }}
     
     steps:
-      - name: Set branch name
-        id: set-branch
+      - name: Set environment variables
+        id: set-vars
         run: |
-          if [[ "${{ matrix.environment }}" == "dev" ]]; then
-            echo "BRANCH=main" >> $GITHUB_ENV
+          # For manual workflow runs, use the GitHub-provided ref
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # The ref will be something like 'refs/heads/main' or 'refs/heads/qa'
+            GITHUB_REF="${{ github.ref }}"
+            REF_NAME="${GITHUB_REF#refs/heads/}"
+            echo "Using branch from workflow dispatch: $REF_NAME"
+            
+            # Map environment to appropriate branch if needed
+            if [[ "${{ matrix.environment }}" == "dev" && "$REF_NAME" != "main" ]]; then
+              echo "Warning: Running dev environment from non-main branch: $REF_NAME"
+            fi
+            
+            echo "branch=$REF_NAME" >> $GITHUB_OUTPUT
           else
-            echo "BRANCH=${{ matrix.environment }}" >> $GITHUB_ENV
+            # For other events, use our standard mapping
+            case "${{ matrix.environment }}" in
+              dev)
+                echo "branch=main" >> $GITHUB_OUTPUT
+                ;;
+              *)
+                echo "branch=${{ matrix.environment }}" >> $GITHUB_OUTPUT
+                ;;
+            esac
           fi
+          
+          # Output the branch we're using
+          BRANCH=$(cat $GITHUB_OUTPUT | grep '^branch=' | cut -d= -f2)
           echo "Building for environment ${{ matrix.environment }} using branch $BRANCH"
       
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ env.BRANCH }}
+          ref: ${{ steps.set-vars.outputs.branch }}
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -118,7 +142,7 @@ jobs:
           # This is a simulation - in a real scenario you would run the actual fastlane command
           echo "TURBO_URL: $TURBO_URL"
           echo "ENVIRONMENT: ${{ matrix.environment }}"
-          echo "BRANCH: ${{ env.BRANCH }}"
+          echo "BRANCH: ${{ steps.set-vars.outputs.branch }}"
           echo "BUILD_DESCRIPTION: $BUILD_DESCRIPTION"
           if [ "${{ matrix.environment }}" = "dev" ]; then
             echo "BUILD_NUMBER: $BUILD_NUMBER"

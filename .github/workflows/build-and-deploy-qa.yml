@@ -1,0 +1,21 @@
+name: Build and Deploy QA
+
+on:
+  push:
+    branches:
+      - "qa"
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["On Publish Tag"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  call-template:
+    uses: ./.github/workflows/build-and-deploy-template.yml
+    with:
+      environment: qa
+      branch: qa

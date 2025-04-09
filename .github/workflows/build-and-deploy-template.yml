@@ -1,0 +1,60 @@
+name: Build and Deploy ${{ inputs.environment }}
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      branch:
+        required: true
+        type: string
+
+jobs:
+  build-and-deploy:
+    runs-on: macos-15
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.branch }}
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Install Fastlane
+        run: gem install fastlane
+
+      - name: Set BUILD_NUMBER
+        if: inputs.environment == 'dev'
+        run: |
+          git fetch origin main
+          BUILD_NUMBER=$(git rev-list --count origin/main)
+          echo "BUILD_NUMBER=${BUILD_NUMBER}" >> "$GITHUB_ENV"
+          echo "Setting BUILD_NUMBER to ${BUILD_NUMBER} for dev environment"
+
+      - name: Set BUILD_DESCRIPTION
+        run: |
+          {
+            echo "BUILD_DESCRIPTION<<EOF"
+            git log -1 --pretty=%B
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+          echo "Set BUILD_DESCRIPTION from last commit message"
+
+      - name: Run Fastlane
+        env:
+          TURBO_URL: ${{ vars.TURBO_URL }}
+        run: |
+          echo "Running fastlane ios build_and_deploy_${{ inputs.environment }}"
+          # This is a simulation - in a real scenario you would run the actual fastlane command
+          echo "TURBO_URL: $TURBO_URL"
+          echo "ENVIRONMENT: ${{ inputs.environment }}"
+          echo "BRANCH: ${{ inputs.branch }}"
+          echo "BUILD_DESCRIPTION: $BUILD_DESCRIPTION"
+          if [ "${{ inputs.environment }}" = "dev" ]; then
+            echo "BUILD_NUMBER: $BUILD_NUMBER"
+          fi

@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   build-and-deploy:
-    uses: ./.github/workflows/build-and-deploy-template.yml@main
+    uses: ./.github/workflows/build-and-deploy-template.yml
     with:
       environment: dev
       branch: main

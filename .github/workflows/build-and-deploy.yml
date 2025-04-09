@@ -40,11 +40,13 @@ jobs:
           - environment: prod
             branch: prod
             condition: ${{ github.event_name != 'push' || github.ref == 'refs/heads/prod' || github.event_name == 'workflow_run' }}
-    if: ${{ matrix.condition }}
     runs-on: macos-15
     environment: ${{ matrix.environment }}
     
     steps:
+      - name: Check Condition
+        if: ${{ matrix.condition }}
+        run: echo "Condition met, proceeding with the job."
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0

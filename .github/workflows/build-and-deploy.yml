@@ -73,17 +73,34 @@ jobs:
       - name: Set environment variables
         id: set-vars
         run: |
-          # Set branch name based on environment using a more structured approach
-          case "${{ matrix.environment }}" in
-            dev)
-              echo "branch=main" >> $GITHUB_OUTPUT
-              ;;
-            *)
-              echo "branch=${{ matrix.environment }}" >> $GITHUB_OUTPUT
-              ;;
-          esac
+          # For manual workflow runs, use the GitHub-provided ref
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # The ref will be something like 'refs/heads/main' or 'refs/heads/qa'
+            GITHUB_REF="${{ github.ref }}"
+            REF_NAME="${GITHUB_REF#refs/heads/}"
+            echo "Using branch from workflow dispatch: $REF_NAME"
+            
+            # Map environment to appropriate branch if needed
+            if [[ "${{ matrix.environment }}" == "dev" && "$REF_NAME" != "main" ]]; then
+              echo "Warning: Running dev environment from non-main branch: $REF_NAME"
+            fi
+            
+            echo "branch=$REF_NAME" >> $GITHUB_OUTPUT
+          else
+            # For other events, use our standard mapping
+            case "${{ matrix.environment }}" in
+              dev)
+                echo "branch=main" >> $GITHUB_OUTPUT
+                ;;
+              *)
+                echo "branch=${{ matrix.environment }}" >> $GITHUB_OUTPUT
+                ;;
+            esac
+          fi
           
-          echo "Building for environment ${{ matrix.environment }} using branch $(cat $GITHUB_OUTPUT | grep '^branch=' | cut -d= -f2)"
+          # Output the branch we're using
+          BRANCH=$(cat $GITHUB_OUTPUT | grep '^branch=' | cut -d= -f2)
+          echo "Building for environment ${{ matrix.environment }} using branch $BRANCH"
       
       - uses: actions/checkout@v4
         with:

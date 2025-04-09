@@ -68,14 +68,14 @@ jobs:
     environment: ${{ matrix.environment }}
     
     steps:
-      - name: Set branch name
-        id: set-branch
+      - name: Determine branch name
         run: |
           if [[ "${{ matrix.environment }}" == "dev" ]]; then
-            echo "BRANCH=main" >> $GITHUB_ENV
+            BRANCH="main"
           else
-            echo "BRANCH=${{ matrix.environment }}" >> $GITHUB_ENV
+            BRANCH="${{ matrix.environment }}"
           fi
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
           echo "Building for environment ${{ matrix.environment }} using branch $BRANCH"
       
       - uses: actions/checkout@v4

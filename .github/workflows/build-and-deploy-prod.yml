@@ -1,0 +1,21 @@
+name: Build and Deploy Production
+
+on:
+  push:
+    branches:
+      - "prod"
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["On Publish Tag"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  call-template:
+    uses: ./.github/workflows/build-and-deploy-template.yml
+    with:
+      environment: prod
+      branch: prod

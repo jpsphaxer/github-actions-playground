@@ -1,0 +1,82 @@
+name: On Publish Tag
+
+on:
+  push:
+    tags:
+      - "*.*.*"
+      - "v*.*.*"
+      - "*.*.*-*"
+      - "v*.*.*-*"
+
+permissions:
+  contents: write
+
+jobs:
+  update-version:
+    name: Update Version
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Install Fastlane
+        run: gem install fastlane
+
+      - name: Extract version from tag
+        uses: damienaicheh/extract-version-from-tag-action@v1.1.0
+
+      - name: Set MARKETING_VERSION
+        run: |
+          if [ -n "${{ env.PRE_RELEASE }}" ]; then
+            echo "MARKETING_VERSION=${{ env.MAJOR }}.${{ env.MINOR }}.${{ env.PATCH }}-${{ env.PRE_RELEASE }}" >> "$GITHUB_ENV"
+            echo "Setting MARKETING_VERSION to ${{ env.MAJOR }}.${{ env.MINOR }}.${{ env.PATCH }}-${{ env.PRE_RELEASE }}"
+          else
+            echo "MARKETING_VERSION=${{ env.MAJOR }}.${{ env.MINOR }}.${{ env.PATCH }}" >> "$GITHUB_ENV"
+            echo "Setting MARKETING_VERSION to ${{ env.MAJOR }}.${{ env.MINOR }}.${{ env.PATCH }}"
+          fi
+          
+      - name: Update version and build number
+        env:
+          BUILD_NUMBER: ${{ env.NUMBER_OF_COMMITS }}
+        run: |
+          echo "Updating version number to $MARKETING_VERSION"
+          echo "APP_VERSION = \"$MARKETING_VERSION\"" > ios/App/version.txt
+          echo "Updating build number to $BUILD_NUMBER"
+          echo "BUILD_NUMBER = \"$BUILD_NUMBER\"" > ios/App/build.txt
+          # In a real scenario, you would use fastlane commands:
+          # fastlane ios update_version_number
+          # fastlane ios update_build_number
+
+      - name: Commit changes
+        uses: EndBug/add-and-commit@v9
+        with:
+          message: "🆙 Update Version to ${{ env.MARKETING_VERSION }} (Build ${{ env.NUMBER_OF_COMMITS }})"
+          default_author: github_actions
+          push: origin HEAD:main
+
+  app-center:
+    name: Branch for App Center
+    runs-on: ubuntu-latest
+    needs: update-version
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        environment: [qa, staging, prod]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: "Merge main -> ${{ matrix.environment }}"
+        uses: devmasx/merge-branch@1.4.0
+        with:
+          type: now
+          from_branch: main
+          target_branch: ${{ matrix.environment }}
+          github_token: ${{ github.token }}

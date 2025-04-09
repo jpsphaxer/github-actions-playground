@@ -1,0 +1,21 @@
+name: Build and Deploy DEV
+
+on:
+  push:
+    branches:
+      - "main"
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["On Publish Tag"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  call-template:
+    uses: ./.github/workflows/build-and-deploy-template.yml
+    with:
+      environment: dev
+      branch: main

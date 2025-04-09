@@ -27,7 +27,8 @@ jobs:
           ruby-version: "3.2"
 
       - name: Install Fastlane
-        run: gem install fastlane
+        run: |
+            echo "Installing Fastlane Dummy" 
 
       - name: Extract version from tag
         uses: damienaicheh/extract-version-from-tag-action@v1.1.0
@@ -69,7 +70,7 @@ jobs:
       contents: write
     strategy:
       matrix:
-        environment: [qa, staging, prod]
+        environment: [qa, prod]
     steps:
       - name: Checkout
         uses: actions/checkout@v3

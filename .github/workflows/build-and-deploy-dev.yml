@@ -14,8 +14,8 @@ permissions:
   contents: read
 
 jobs:
-  call-template:
-    uses: ./.github/workflows/build-and-deploy-template.yml
+  build-and-deploy:
+    uses: ./.github/workflows/build-and-deploy-template.yml@main
     with:
       environment: dev
       branch: main

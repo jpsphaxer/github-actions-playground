@@ -1,4 +1,4 @@
-name: Build and Deploy ${{ inputs.environment }}
+name: Build and Deploy Template
 
 on:
   workflow_call:
@@ -29,7 +29,7 @@ jobs:
         run: gem install fastlane
 
       - name: Set BUILD_NUMBER
-        if: inputs.environment == 'dev'
+        if: ${{ inputs.environment == 'dev' }}
         run: |
           git fetch origin main
           BUILD_NUMBER=$(git rev-list --count origin/main)

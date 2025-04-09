@@ -1,0 +1,109 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - "main"
+      - "qa"
+      - "prod"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+  workflow_run:
+    workflows: ["On Publish Tag"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: macos-15
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'dev') || (github.ref == 'refs/heads/qa' && 'qa') || (github.ref == 'refs/heads/prod' && 'prod') }}
+    
+    steps:
+      - name: Determine environment and branch
+        id: env-branch
+        run: |
+          # Determine environment based on branch or input
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            ENVIRONMENT="dev"
+          elif [ "${{ github.ref }}" = "refs/heads/qa" ]; then
+            ENVIRONMENT="qa"
+          elif [ "${{ github.ref }}" = "refs/heads/prod" ]; then
+            ENVIRONMENT="prod"
+          fi
+          
+          # Determine branch based on environment
+          if [ "$ENVIRONMENT" = "dev" ]; then
+            BRANCH="main"
+          else
+            BRANCH="$ENVIRONMENT"
+          fi
+          
+          echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+          
+          echo "environment=$ENVIRONMENT" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          
+          echo "Deploying to $ENVIRONMENT environment from $BRANCH branch"
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.BRANCH }}
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Install Fastlane
+        run: |
+          echo "Installing Fastlane Dummy"
+          # In a real scenario, you would run the actual fastlane installation command
+          # gem install fastlane
+
+      - name: Set BUILD_NUMBER
+        if: env.ENVIRONMENT == 'dev'
+        run: |
+          git fetch origin main
+          BUILD_NUMBER=$(git rev-list --count origin/main)
+          echo "BUILD_NUMBER=${BUILD_NUMBER}" >> "$GITHUB_ENV"
+          echo "Setting BUILD_NUMBER to ${BUILD_NUMBER} for dev environment"
+
+      - name: Set BUILD_DESCRIPTION
+        run: |
+          {
+            echo "BUILD_DESCRIPTION<<EOF"
+            git log -1 --pretty=%B
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+          echo "Set BUILD_DESCRIPTION from last commit message"
+
+      - name: Run Fastlane
+        env:
+          TURBO_URL: ${{ vars.TURBO_URL }}
+        run: |
+          echo "Running fastlane ios build_and_deploy_${{ env.ENVIRONMENT }}"
+          # This is a simulation - in a real scenario you would run the actual fastlane command
+          echo "TURBO_URL: $TURBO_URL"
+          echo "ENVIRONMENT: ${{ env.ENVIRONMENT }}"
+          echo "BRANCH: ${{ env.BRANCH }}"
+          echo "BUILD_DESCRIPTION: $BUILD_DESCRIPTION"
+          if [ "${{ env.ENVIRONMENT }}" = "dev" ]; then
+            echo "BUILD_NUMBER: $BUILD_NUMBER"
+          fi

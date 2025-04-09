@@ -26,31 +26,62 @@ permissions:
   contents: read
 
 jobs:
-  build-and-deploy-env:
-    name: Build and Deploy
+  determine-environment:
+    runs-on: ubuntu-latest
+    outputs:
+      environments: ${{ steps.set-matrix.outputs.environments }}
+    steps:
+      - id: set-matrix
+        run: |
+          # Default to empty array
+          ENVIRONMENTS="[]"
+          
+          # For workflow_dispatch, only include the selected environment
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENVIRONMENTS="[\"${{ github.event.inputs.environment }}\"]"
+          
+          # For push events, only include the branch that was pushed to
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+              ENVIRONMENTS="[\"dev\"]"
+            elif [[ "${{ github.ref }}" == "refs/heads/qa" ]]; then
+              ENVIRONMENTS="[\"qa\"]"
+            elif [[ "${{ github.ref }}" == "refs/heads/prod" ]]; then
+              ENVIRONMENTS="[\"prod\"]"
+            fi
+          
+          # For workflow_run from tag workflow, include all environments
+          elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            ENVIRONMENTS="[\"dev\", \"qa\", \"prod\"]"
+          fi
+          
+          echo "environments=$ENVIRONMENTS" >> $GITHUB_OUTPUT
+          echo "Will build for environments: $ENVIRONMENTS"
+
+  build-and-deploy:
+    needs: determine-environment
+    name: Build and Deploy ${{ matrix.environment }}
     strategy:
       matrix:
-        include:
-          - environment: dev
-            branch: main
-            condition: ${{ github.event_name != 'push' || github.ref == 'refs/heads/main' }}
-          - environment: qa
-            branch: qa
-            condition: ${{ github.event_name != 'push' || github.ref == 'refs/heads/qa' || github.event_name == 'workflow_run' }}
-          - environment: prod
-            branch: prod
-            condition: ${{ github.event_name != 'push' || github.ref == 'refs/heads/prod' || github.event_name == 'workflow_run' }}
+        environment: ${{ fromJson(needs.determine-environment.outputs.environments) }}
     runs-on: macos-15
     environment: ${{ matrix.environment }}
     
     steps:
-      - name: Check Condition
-        if: ${{ matrix.condition }}
-        run: echo "Condition met, proceeding with the job."
+      - name: Set branch name
+        id: set-branch
+        run: |
+          if [[ "${{ matrix.environment }}" == "dev" ]]; then
+            echo "BRANCH=main" >> $GITHUB_ENV
+          else
+            echo "BRANCH=${{ matrix.environment }}" >> $GITHUB_ENV
+          fi
+          echo "Building for environment ${{ matrix.environment }} using branch $BRANCH"
+      
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ matrix.branch }}
+          ref: ${{ env.BRANCH }}
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -87,7 +118,7 @@ jobs:
           # This is a simulation - in a real scenario you would run the actual fastlane command
           echo "TURBO_URL: $TURBO_URL"
           echo "ENVIRONMENT: ${{ matrix.environment }}"
-          echo "BRANCH: ${{ matrix.branch }}"
+          echo "BRANCH: ${{ env.BRANCH }}"
           echo "BUILD_DESCRIPTION: $BUILD_DESCRIPTION"
           if [ "${{ matrix.environment }}" = "dev" ]; then
             echo "BUILD_NUMBER: $BUILD_NUMBER"
